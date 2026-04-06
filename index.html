@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>コストバンク試算 | AI未活用の機会損失シミュレーター</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+<script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    navy: {
+                        50: '#f0f4f8', 100: '#d9e2ec', 200: '#bcccdc', 300: '#9fb3c8',
+                        400: '#829ab1', 500: '#627d98', 600: '#486581', 700: '#334e68',
+                        800: '#243b53', 900: '#102a43',
+                    }
+                }
+            }
+        }
+    }
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<style>
+    [x-cloak] { display: none !important; }
+    body { font-family: 'Noto Sans JP', sans-serif; }
+
+    .fade-in { animation: fadeIn 0.6s ease-out; }
+    .slide-up { animation: slideUp 0.8s ease-out; }
+    .count-up { animation: countPulse 0.3s ease-out; }
+
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    @keyframes slideUp {
+        from { opacity: 0; transform: translateY(30px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes countPulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.02); }
+        100% { transform: scale(1); }
+    }
+    @keyframes barGrow {
+        from { width: 0; }
+    }
+    .bar-animate {
+        animation: barGrow 1s ease-out forwards;
+    }
+
+    .glass-card {
+        background: rgba(255,255,255,0.85);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.5);
+    }
+
+    input[type="number"] {
+        -moz-appearance: textfield;
+    }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+</style>
+</head>
+
+<body class="bg-gradient-to-br from-navy-900 via-navy-800 to-slate-900 min-h-screen" x-data="costBank()" x-cloak>
+
+<!-- ========== STEP 1: 入力画面 ========== -->
+<div x-show="step === 1" x-transition class="min-h-screen flex items-center justify-center p-4">
+    <div class="max-w-2xl w-full">
+        <!-- Header -->
+        <div class="text-center mb-10 slide-up">
+            <div class="inline-flex items-center gap-2 bg-red-500/20 text-red-300 px-4 py-1.5 rounded-full text-sm font-medium mb-6">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                </svg>
+                Cost Bank Simulator
+            </div>
+            <h1 class="text-4xl md:text-5xl font-bold text-white leading-tight mb-4">
+                AIを活用<span class="text-red-400">しない</span>ことの<br>コストを知っていますか？
+            </h1>
+            <p class="text-navy-300 text-lg">
+                4つの質問に答えるだけで、御社の「見えない損失」を可視化します
+            </p>
+        </div>
+
+        <!-- Form -->
+        <div class="bg-white rounded-2xl p-8 shadow-2xl">
+            <!-- 年商・従業員数 -->
+            <div class="mb-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="text-navy-800 font-bold text-lg block mb-3">年商</label>
+                    <div class="flex items-center gap-3">
+                        <input type="number" x-model.number="revenue" min="0.1" step="0.1"
+                               class="w-full bg-navy-50 border-2 border-navy-200 rounded-lg px-4 py-3 text-2xl font-bold text-navy-900 text-right focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all"
+                               placeholder="5">
+                        <span class="text-navy-500 text-lg font-bold whitespace-nowrap">億円</span>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-navy-800 font-bold text-lg block mb-3">従業員数</label>
+                    <div class="flex items-center gap-3">
+                        <input type="number" x-model.number="employees" min="1" step="1"
+                               class="w-full bg-navy-50 border-2 border-navy-200 rounded-lg px-4 py-3 text-2xl font-bold text-navy-900 text-right focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all"
+                               placeholder="100">
+                        <span class="text-navy-500 text-lg font-bold whitespace-nowrap">名</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 業種 -->
+            <div class="mb-8">
+                <label class="text-navy-800 font-bold text-lg block mb-3">業種</label>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <template x-for="ind in industries" :key="ind.value">
+                        <button @click="industry = ind.value"
+                                :class="industry === ind.value ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white border-gray-300 text-navy-700 hover:border-blue-400 hover:bg-blue-50'"
+                                class="border-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-all text-center"
+                                x-text="ind.label">
+                        </button>
+                    </template>
+                </div>
+            </div>
+
+            <!-- AI活用度（2軸） -->
+            <div class="mb-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- 経営者のAI関与度 -->
+                    <div>
+                        <label class="text-navy-800 font-bold text-base block mb-3">経営者ご自身のAI活用状況は？</label>
+                        <div class="space-y-2">
+                            <template x-for="(lvl, idx) in ceoLevels" :key="idx">
+                                <button @click="ceoLevel = idx"
+                                        :class="ceoLevel === idx ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white border-gray-300 text-navy-700 hover:border-blue-400 hover:bg-blue-50'"
+                                        class="w-full border-2 rounded-lg px-4 py-3 text-left transition-all text-sm font-medium"
+                                        x-text="lvl.label">
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                    <!-- 現場のAI利用率 -->
+                    <div>
+                        <label class="text-navy-800 font-bold text-base block mb-3">社員のうち、AIを業務で使っている人は？</label>
+                        <div class="space-y-2">
+                            <template x-for="(lvl, idx) in fieldLevels" :key="idx">
+                                <button @click="fieldLevel = idx"
+                                        :class="fieldLevel === idx ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white border-gray-300 text-navy-700 hover:border-blue-400 hover:bg-blue-50'"
+                                        class="w-full border-2 rounded-lg px-4 py-3 text-left transition-all flex items-center justify-between">
+                                    <span class="text-sm font-medium" x-text="lvl.label"></span>
+                                    <span class="text-xs" :class="fieldLevel === idx ? 'text-blue-100' : 'text-gray-400'" x-text="lvl.desc"></span>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 試算ボタン -->
+            <button @click="calculate()"
+                    class="w-full bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white font-bold text-lg py-4 rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.01]">
+                コストバンクを試算する
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ========== STEP 2: 結果画面 ========== -->
+<div x-show="step === 2" x-transition class="min-h-screen py-8 px-4">
+    <div class="max-w-5xl mx-auto">
+
+        <!-- 合計コストバンク（メインビジュアル） -->
+        <div class="text-center mb-10 slide-up">
+            <p class="text-navy-300 text-lg mb-2">
+                年商 <span class="text-white font-bold" x-text="formatOku(revenue)"></span> ／
+                従業員 <span class="text-white font-bold" x-text="employees + '名'"></span> ／
+                <span class="text-white font-bold" x-text="getIndustryLabel()"></span> の場合
+            </p>
+            <div class="inline-flex items-center gap-2 bg-red-500/20 text-red-300 px-4 py-1.5 rounded-full text-sm font-medium mb-6">
+                AI未活用による年間機会損失（推計）
+            </div>
+            <div class="relative">
+                <div class="text-7xl md:text-8xl font-black text-white tracking-tight">
+                    <span class="text-red-400">約 </span>
+                    <span x-text="animatedTotal" class="count-up"></span>
+                    <span class="text-4xl md:text-5xl text-red-400"> 万円</span>
+                </div>
+                <p class="text-navy-400 text-sm mt-3">※ 業界平均データおよび調査に基づく概算値です</p>
+            </div>
+        </div>
+
+        <!-- 5カテゴリ内訳 -->
+        <div class="max-w-3xl mx-auto mb-10">
+            <div class="space-y-4">
+                <h2 class="text-white font-bold text-xl mb-4">損失の内訳</h2>
+                <template x-for="(cat, idx) in categories" :key="cat.key">
+                    <div class="bg-white/95 backdrop-blur rounded-xl p-5 slide-up shadow-lg border border-white/50" :style="'animation-delay:' + (idx * 0.1) + 's'">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-lg flex items-center justify-center text-lg"
+                                     :style="'background:' + cat.color + '22; color:' + cat.color"
+                                     x-html="cat.icon">
+                                </div>
+                                <div>
+                                    <div class="text-navy-800 font-bold text-sm" x-text="cat.label"></div>
+                                    <div class="text-gray-500 text-xs" x-text="cat.desc"></div>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-navy-900 font-bold text-lg" x-text="formatMan(results[cat.key])"></div>
+                            </div>
+                        </div>
+                        <!-- プログレスバー -->
+                        <div class="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+                            <div class="h-2.5 rounded-full bar-animate"
+                                 :style="'background:' + cat.color + '; width:' + (results[cat.key] / maxCategoryValue * 100) + '%'">
+                            </div>
+                        </div>
+                        <!-- 算出根拠トグル -->
+                        <button @click="showLogic[cat.key] = !showLogic[cat.key]"
+                                class="mt-3 text-gray-400 hover:text-blue-600 text-xs flex items-center gap-1 transition-colors">
+                            <svg class="w-3.5 h-3.5 transition-transform" :class="showLogic[cat.key] ? 'rotate-90' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                            </svg>
+                            算出根拠を見る
+                        </button>
+                        <div x-show="showLogic[cat.key]" x-transition class="mt-3 bg-navy-800 rounded-lg p-4 text-xs space-y-2">
+                            <div class="text-navy-200 font-medium">計算式</div>
+                            <div class="text-navy-300 font-mono leading-relaxed" x-html="getLogicFormula(cat.key)"></div>
+                            <div class="text-navy-200 font-medium mt-2">根拠</div>
+                            <div class="text-navy-400 leading-relaxed" x-html="getLogicSource(cat.key)"></div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- CSSグラフ: カテゴリ別損失額 -->
+            <div class="mt-8 bg-navy-800/60 rounded-xl p-6">
+                <h3 class="text-white font-bold text-lg mb-5">カテゴリ別損失額</h3>
+                <div class="space-y-4">
+                    <template x-for="cat in categories" :key="cat.key + '_bar'">
+                        <div>
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="text-navy-300 text-xs" x-text="cat.label"></span>
+                                <span class="text-white text-xs font-bold" x-text="formatMan(results[cat.key])"></span>
+                            </div>
+                            <div class="w-full bg-navy-700/50 rounded-full h-5">
+                                <div class="h-5 rounded-full bar-animate flex items-center justify-end pr-2"
+                                     :style="'background:' + cat.color + '; width:' + Math.max(5, results[cat.key] / maxCategoryValue * 100) + '%'">
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- CSSグラフ: 累積損失タイムライン -->
+            <div class="mt-6 bg-navy-800/60 rounded-xl p-6">
+                <h3 class="text-white font-bold text-lg mb-5">累積損失シミュレーション</h3>
+                <div class="flex items-end justify-between gap-3" style="height: 200px;">
+                    <template x-for="(yr, idx) in [1,2,3,4,5]" :key="'yr'+yr">
+                        <div class="flex-1 flex flex-col items-center justify-end h-full">
+                            <div class="text-white text-xs font-bold mb-1" x-text="formatMan(getCumulativeLoss(yr))"></div>
+                            <div class="w-full rounded-t-lg bar-animate"
+                                 :style="'background: linear-gradient(to top, #ef4444, #f97316); height:' + (getCumulativeLoss(yr) / getCumulativeLoss(5) * 160) + 'px'"
+                                 :class="idx === 0 ? '' : ''">
+                            </div>
+                            <div class="text-navy-400 text-xs mt-2 font-medium" x-text="yr + '年後'"></div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- CTA -->
+        <div class="glass-card rounded-2xl p-10 text-center slide-up">
+            <h2 class="text-3xl font-bold text-gray-800 mb-3">この損失を止める第一歩</h2>
+            <p class="text-gray-500 text-lg mb-8">
+                御社のAI経営診断を<span class="text-gray-900 font-bold">無料</span>で実施します
+            </p>
+            <div class="flex flex-col md:flex-row items-center justify-center gap-6">
+                <button class="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-bold text-lg px-10 py-4 rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02]">
+                    無料AI経営診断に申し込む
+                </button>
+                <div class="text-center">
+                    <div class="w-32 h-32 bg-gray-100 border border-gray-200 rounded-xl flex items-center justify-center mx-auto">
+                        <div class="text-gray-400 text-xs text-center px-2">
+                            <svg class="w-8 h-8 mx-auto mb-1 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+                            </svg>
+                            QRコード<br>設置エリア
+                        </div>
+                    </div>
+                    <div class="text-gray-400 text-xs mt-2">スマホでスキャン</div>
+                </div>
+            </div>
+            <div class="mt-8 pt-6 border-t border-gray-200">
+                <p class="text-gray-500 text-sm">
+                    AI参謀室では、経営者が自らAIを使いこなし、<br>
+                    AI時代の経営判断ができる組織づくりを支援しています
+                </p>
+            </div>
+        </div>
+
+        <!-- 戻るボタン -->
+        <div class="text-center mt-8">
+            <button @click="reset()" class="text-navy-400 hover:text-white text-sm transition-colors">
+                &larr; 条件を変えてもう一度試算する
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+function costBank() {
+    return {
+        step: 1,
+        revenue: 5,        // 億円
+        employees: 100,
+        industry: 'manufacturing',
+        ceoLevel: 0,
+        fieldLevel: 0,
+
+        animatedTotal: '0',
+        showLogic: {},
+
+        results: {
+            efficiency: 0,
+            decision: 0,
+            talent: 0,
+            wastedInvestment: 0,
+            competitiveGap: 0,
+            total: 0,
+        },
+        maxCategoryValue: 0,
+
+        industries: [
+            { value: 'manufacturing', label: '製造業' },
+            { value: 'service', label: 'サービス業' },
+            { value: 'it', label: 'IT・通信' },
+            { value: 'retail', label: '小売・卸' },
+            { value: 'construction', label: '建設・不動産' },
+            { value: 'professional', label: '専門サービス（士業）' },
+            { value: 'medical', label: '医療・福祉' },
+            { value: 'finance', label: '金融・保険' },
+            { value: 'education', label: '教育・研修' },
+            { value: 'hospitality', label: '飲食・宿泊' },
+            { value: 'logistics', label: '物流・運輸' },
+            { value: 'marketing', label: '広告・マーケ' },
+            { value: 'hr', label: '人材・HR' },
+            { value: 'consulting', label: 'コンサルティング' },
+            { value: 'media', label: 'メディア・出版' },
+            { value: 'other', label: 'その他' },
+        ],
+
+        ceoLevels: [
+            { label: 'たまに調べ物に使う程度' },
+            { label: '日常業務（メール・資料）で活用' },
+            { label: '戦略・分析に組み込んでいる' },
+            { label: '経営判断のパートナーとして日常的に使用' },
+            { label: 'AIを前提とした経営スタイルを確立済み' },
+        ],
+
+        fieldLevels: [
+            { label: 'ほとんどいない', desc: '10%未満' },
+            { label: '使い始めた人が出てきた', desc: '10〜30%' },
+            { label: '3〜5割くらいが使っている', desc: '30〜50%' },
+            { label: '過半数が使っている', desc: '50〜80%' },
+            { label: 'ほぼ全員が使っている', desc: '80%以上' },
+        ],
+
+        ceoScores: [0.85, 0.65, 0.45, 0.25, 0.05],
+        fieldScores: [0.95, 0.80, 0.60, 0.35, 0.10],
+
+        // 業種別パラメータ
+        // efficiencyHours: 月間AI省力化可能時間(h/人), decisionRate: 判断遅延インパクト率,
+        // talentMultiplier: AI人材流出リスク係数, wasteMultiplier: AI投資空振りリスク係数, gapRate: 競争力ギャップ拡大率
+        industryParams: {
+            manufacturing:  { efficiencyHours: 12, decisionRate: 0.015, talentMultiplier: 1.0, wasteMultiplier: 1.2, gapRate: 0.020, educationCostPerPerson: 12 },
+            service:        { efficiencyHours: 10, decisionRate: 0.012, talentMultiplier: 0.8, wasteMultiplier: 1.0, gapRate: 0.018, educationCostPerPerson: 13 },
+            it:             { efficiencyHours: 15, decisionRate: 0.018, talentMultiplier: 1.5, wasteMultiplier: 0.8, gapRate: 0.025, educationCostPerPerson: 20 },
+            retail:         { efficiencyHours: 8,  decisionRate: 0.010, talentMultiplier: 0.7, wasteMultiplier: 1.1, gapRate: 0.015, educationCostPerPerson: 10 },
+            construction:   { efficiencyHours: 10, decisionRate: 0.012, talentMultiplier: 0.9, wasteMultiplier: 1.3, gapRate: 0.018, educationCostPerPerson: 12 },
+            professional:   { efficiencyHours: 14, decisionRate: 0.016, talentMultiplier: 1.3, wasteMultiplier: 0.9, gapRate: 0.022, educationCostPerPerson: 18 },
+            medical:        { efficiencyHours: 9,  decisionRate: 0.010, talentMultiplier: 0.8, wasteMultiplier: 1.1, gapRate: 0.015, educationCostPerPerson: 13 },
+            finance:        { efficiencyHours: 14, decisionRate: 0.020, talentMultiplier: 1.4, wasteMultiplier: 1.0, gapRate: 0.025, educationCostPerPerson: 18 },
+            education:      { efficiencyHours: 11, decisionRate: 0.010, talentMultiplier: 0.9, wasteMultiplier: 1.0, gapRate: 0.016, educationCostPerPerson: 13 },
+            hospitality:    { efficiencyHours: 7,  decisionRate: 0.008, talentMultiplier: 0.6, wasteMultiplier: 1.2, gapRate: 0.014, educationCostPerPerson: 10 },
+            logistics:      { efficiencyHours: 13, decisionRate: 0.014, talentMultiplier: 1.0, wasteMultiplier: 1.1, gapRate: 0.022, educationCostPerPerson: 12 },
+            marketing:      { efficiencyHours: 16, decisionRate: 0.016, talentMultiplier: 1.4, wasteMultiplier: 0.7, gapRate: 0.028, educationCostPerPerson: 20 },
+            hr:             { efficiencyHours: 13, decisionRate: 0.012, talentMultiplier: 1.2, wasteMultiplier: 0.9, gapRate: 0.020, educationCostPerPerson: 18 },
+            consulting:     { efficiencyHours: 16, decisionRate: 0.018, talentMultiplier: 1.5, wasteMultiplier: 0.8, gapRate: 0.026, educationCostPerPerson: 20 },
+            media:          { efficiencyHours: 15, decisionRate: 0.014, talentMultiplier: 1.3, wasteMultiplier: 0.8, gapRate: 0.024, educationCostPerPerson: 20 },
+            other:          { efficiencyHours: 10, decisionRate: 0.012, talentMultiplier: 1.0, wasteMultiplier: 1.0, gapRate: 0.018, educationCostPerPerson: 13 },
+        },
+
+        // AI未活用率の算出（経営者40% + 現場60%）
+        getUnusedRate() {
+            return this.ceoScores[this.ceoLevel] * 0.4 + this.fieldScores[this.fieldLevel] * 0.6;
+        },
+
+        categories: [
+            { key: 'efficiency',       label: '業務効率の損失',          desc: '人がやらなくてよい作業に費やしている時間',         color: '#ef4444', icon: '&#9202;' },
+            { key: 'decision',         label: '経営判断の遅延コスト',     desc: 'データに基づく迅速な判断ができない損失',            color: '#f59e0b', icon: '&#9889;' },
+            { key: 'talent',           label: '人材に関する損失',         desc: 'AI人材の流出・採用困難化のコスト',                  color: '#8b5cf6', icon: '&#128101;' },
+            { key: 'wastedInvestment', label: '無駄になるAI投資',   desc: 'ツール・外注・研修の空振りコスト（研修なし導入で定着せず）', color: '#06b6d4', icon: '&#128176;' },
+            { key: 'competitiveGap',   label: '競争力ギャップ',     desc: 'AI活用企業との差が年々拡大する損失',                       color: '#ec4899', icon: '&#128200;' },
+        ],
+
+        formatOku(val) {
+            if (val >= 1 && val < 10) {
+                return val % 1 === 0 ? val + '億円' : val.toFixed(1) + '億円';
+            }
+            return val + '億円';
+        },
+
+        formatMan(val) {
+            if (val >= 10000) {
+                return (val / 10000).toFixed(1) + '億円';
+            }
+            return Math.round(val).toLocaleString() + '万円';
+        },
+
+        getCumulativeLoss(years) {
+            let sum = 0;
+            for (let i = 0; i < years; i++) {
+                sum += Math.round(this.results.total * Math.pow(1.15, i));
+            }
+            return sum;
+        },
+
+        getIndustryLabel() {
+            const found = this.industries.find(i => i.value === this.industry);
+            return found ? found.label : '';
+        },
+
+        getUnusedPercent() {
+            return Math.round(this.getUnusedRate() * 100);
+        },
+
+        getLogicFormula(key) {
+            const p = this.industryParams[this.industry];
+            const ur = this.getUnusedPercent();
+            const ind = this.getIndustryLabel();
+
+            switch(key) {
+                case 'efficiency':
+                    return `<span class="text-white">${this.employees}名</span> × <span class="text-white">${p.efficiencyHours}h/月</span> × <span class="text-white">¥3,000/h</span> × <span class="text-white">12ヶ月</span> × <span class="text-red-300">${ur}%（未活用率）</span><br>＝ <span class="text-white font-bold">${this.formatMan(this.results.efficiency)}</span>`;
+                case 'decision':
+                    return `<span class="text-white">年商${this.revenue}億円</span> × <span class="text-white">${(p.decisionRate * 100).toFixed(1)}%（判断遅延インパクト率）</span> × <span class="text-red-300">${ur}%（未活用率）</span><br>＝ <span class="text-white font-bold">${this.formatMan(this.results.decision)}</span>`;
+                case 'talent': {
+                    const arc = Math.max(1, Math.floor(this.employees / 80));
+                    return `<span class="text-white">年収1,000万</span> × <span class="text-white">2.0倍（採用費+オンボ+引き継ぎ）</span> × <span class="text-white">${arc}名（流出リスク人数）</span> × <span class="text-white">${p.talentMultiplier}（${ind}係数）</span> × <span class="text-red-300">${ur}%（未活用率）</span><br>＝ <span class="text-white font-bold">${this.formatMan(this.results.talent)}</span>`;
+                }
+                case 'wastedInvestment': {
+                    const tw = (this.employees * 0.3 * 12 * 0.4).toFixed(0);
+                    const nonTrainedPct = Math.round(this.fieldScores[this.fieldLevel] * 100);
+                    const ew = Math.round(this.employees * p.educationCostPerPerson * this.fieldScores[this.fieldLevel]);
+                    return `(<span class="text-white">ツール空振り: ${this.employees}名 × ¥3,000/月 × 12ヶ月 × 40% = ${tw}万</span> + <span class="text-white">外注失敗 400万×30%</span>) × <span class="text-white">${p.wasteMultiplier}（${ind}係数）</span> × <span class="text-red-300">${ur}%</span><br>＋ <span class="text-white">研修空振り: ${this.employees}名 × ¥${p.educationCostPerPerson}万/人/年 × ${nonTrainedPct}%（未受講率）= ${ew}万</span><br>＝ <span class="text-white font-bold">${this.formatMan(this.results.wastedInvestment)}</span>`;
+                }
+                case 'competitiveGap':
+                    return `<span class="text-white">年商${this.revenue}億円</span> × <span class="text-white">${(p.gapRate * 100).toFixed(1)}%（年間ギャップ拡大率）</span> × <span class="text-red-300">${ur}%（未活用率）</span><br>＝ <span class="text-white font-bold">${this.formatMan(this.results.competitiveGap)}</span>`;
+                default: return '';
+            }
+        },
+
+        getLogicSource(key) {
+            const ind = this.getIndustryLabel();
+            const p = this.industryParams[this.industry];
+            switch(key) {
+                case 'efficiency':
+                    return `${ind}のAI省力化ポテンシャルは<strong class="text-navy-200">月間${p.efficiencyHours}時間/人</strong>と推定。McKinsey Global Institute等の調査では、定型業務の30-40%がAIで自動化可能とされており、これを月間労働時間に換算しています。時給3,000円は中小企業の平均人件費ベース。`;
+                case 'decision':
+                    return `BCG Henderson Institute研究: 経営判断1回の価値は年商の数%に相当。${ind}では判断遅延インパクト率を<strong class="text-navy-200">${(p.decisionRate * 100).toFixed(1)}%</strong>と設定。データ分析・市場予測・リスク評価等でのAI活用による意思決定の質向上を反映。`;
+                case 'talent':
+                    return `AI人材の年収は<strong class="text-navy-200">800〜1,200万円</strong>が相場。離職・再採用の総コストは年収の<strong class="text-navy-200">約2倍</strong>（人材紹介手数料30-35% + オンボーディング3-6ヶ月の生産性低下 + 知識喪失 + 採用工数）。AI活用が遅れている企業の離職率はAI活用企業の<strong class="text-navy-200">1.4倍</strong>（東京商工リサーチ）。${ind}の業種係数は<strong class="text-navy-200">${p.talentMultiplier}</strong>。`;
+                case 'wastedInvestment':
+                    return `戦略なきAI導入の失敗率は<strong class="text-navy-200">30-40%</strong>（Gartner調査）。AIツールのライセンスコストは<strong class="text-navy-200">1社員あたり月額約3,000円</strong>が相場で、未活用のまま放置されるケースが多い。外部委託プロジェクトの失敗コスト（300-500万円/件）と合算し、${ind}の空振りリスク係数<strong class="text-navy-200">${p.wasteMultiplier}</strong>で算出。さらに、AIツール導入企業の<strong class="text-navy-200">62%が「研修不足で現場定着しない」</strong>と回答（IDC調査）。研修なしの導入ではツール費用の<strong class="text-navy-200">50-70%が無駄になる</strong>とされており、${ind}の適正研修費<strong class="text-navy-200">年間${p.educationCostPerPerson}万円/人</strong>の未投資分を研修空振りコストとして加算。`;
+                case 'competitiveGap':
+                    return `AI活用企業と非活用企業の年間成長率差は<strong class="text-navy-200">2-3%</strong>。${ind}の年間ギャップ拡大率は<strong class="text-navy-200">${(p.gapRate * 100).toFixed(1)}%</strong>。さらに、<strong class="text-navy-200">1年の遅延でキャッチアップコストは3-5倍</strong>に膨らむ（先行企業との差が累積的に拡大するため）。`;
+                default: return '';
+            }
+        },
+
+        calculate() {
+            const params = this.industryParams[this.industry];
+            const unusedRate = this.getUnusedRate();
+            const revenueMankyen = this.revenue * 10000; // 億→万円
+
+            // ① 業務効率の損失: 従業員数 × 月間省力化可能時間 × 時給3000円 × 12ヶ月 × 未活用率
+            const hourlyRate = 3000; // 円
+            this.results.efficiency = Math.round(
+                this.employees * params.efficiencyHours * hourlyRate * 12 * unusedRate / 10000
+            ); // 万円
+
+            // ② 経営判断の遅延コスト: 年商 × 判断遅延インパクト率 × 未活用率
+            this.results.decision = Math.round(
+                revenueMankyen * params.decisionRate * unusedRate
+            );
+
+            // ③ 人材に関する損失: AI人材の離職・再採用の総コスト
+            // 年収800-1200万 × 離職総コスト倍率2.0（採用手数料+オンボーディング+引き継ぎ+知識喪失）
+            const annualSalary = 1000; // AI人材の平均年収（万円）
+            const turnoverMultiplier = 2.0; // 離職総コスト = 年収の約2倍
+            const turnoverCost = annualSalary * turnoverMultiplier; // 1人あたり2,000万円
+            const atRiskCount = Math.max(1, Math.floor(this.employees / 80)); // 流出リスク人数
+            this.results.talent = Math.round(
+                turnoverCost * atRiskCount * params.talentMultiplier * unusedRate
+            );
+
+            // ④ 無駄になるAI投資: ツール費用空振り + 外部委託失敗 + 研修空振り
+            // 1社員あたり月額約3,000円 × 12ヶ月 × 空振り率40% + 外部委託失敗(300-500万 × 確率)
+            const toolWaste = (this.employees * 0.3 * 12) * 0.4; // 万円（3,000円=0.3万円/人/月）
+            const projectWaste = 400 * 0.3; // 万円（300-500万の案件が30%失敗）
+            // 研修空振り: 従業員数 × 適正研修費/人/年 × 未受講率（研修なし導入の機会損失）
+            const nonTrainedRate = this.fieldScores[this.fieldLevel];
+            const educationWaste = this.employees * params.educationCostPerPerson * nonTrainedRate;
+            this.results.wastedInvestment = Math.round(
+                (toolWaste + projectWaste) * params.wasteMultiplier * unusedRate + educationWaste
+            );
+
+            // ⑤ 競争力ギャップ: 年商 × ギャップ拡大率 × 未活用率
+            this.results.competitiveGap = Math.round(
+                revenueMankyen * params.gapRate * unusedRate
+            );
+
+            // 合計
+            this.results.total =
+                this.results.efficiency +
+                this.results.decision +
+                this.results.talent +
+                this.results.wastedInvestment +
+                this.results.competitiveGap;
+
+            // 最大カテゴリ値（バーチャートスケール用）
+            this.maxCategoryValue = Math.max(
+                this.results.efficiency,
+                this.results.decision,
+                this.results.talent,
+                this.results.wastedInvestment,
+                this.results.competitiveGap
+            );
+
+            // ステップ遷移
+            this.step = 2;
+
+            // アニメーション付きカウントアップ
+            this.$nextTick(() => {
+                this.animateCount(this.results.total);
+            });
+        },
+
+        animateCount(target) {
+            const duration = 1500;
+            const start = performance.now();
+            const tick = (now) => {
+                const progress = Math.min((now - start) / duration, 1);
+                const eased = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+                const current = Math.round(target * eased);
+                this.animatedTotal = current.toLocaleString();
+                if (progress < 1) requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+        },
+
+        reset() {
+            this.step = 1;
+            this.animatedTotal = '0';
+        }
+    };
+}
+</script>
+
+</body>
+</html>
